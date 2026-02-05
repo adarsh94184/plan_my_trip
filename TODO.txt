@@ -1,0 +1,98 @@
+# TripWise - Implementation TODO List
+# ====================================
+# Last Updated: 2026-02-05
+
+## ✅ COMPLETED - Real API Integrations
+-----------------------------------------
+
+### API Routes (Using Geoapify)
+- [x] /api/geocode - Location search & autocomplete (REAL)
+- [x] /api/marker - Custom map marker icons (REAL)
+- [x] /api/placedetails - Place details with geometry (REAL)
+- [x] /api/places - Nearby places search by category (REAL)
+- [x] /api/routematrix - Time-distance matrix calculation (REAL)
+- [x] /api/routing - Turn-by-turn directions (REAL)
+
+### Components Using Real APIs
+- [x] TripMap - Uses /api/geocode for origin/destination geocoding
+- [x] TripMap - Uses /api/marker for location markers
+- [x] TripMap - Uses /api/placedetails for detailed info
+- [x] NearbyPlaces - Uses /api/places for attractions/restaurants
+- [x] TransportComparison - Uses /api/geocode for coordinates
+- [x] TransportComparison - Uses /api/routematrix for distance calc
+
+### Frontend Pages
+- [x] /geocode - Geocoding demo page
+
+
+## ⚠️ MOCK / ESTIMATED DATA
+-----------------------------------------
+
+### TransportComparison.jsx
+- [ ] Flight prices: MOCK (using ₹12/km estimate)
+- [ ] Train prices: MOCK (using ₹6/km estimate)
+- [ ] Bus prices: MOCK (using ₹4/km estimate)
+- [ ] Car/Cab prices: MOCK (using ₹10/km estimate)
+- [ ] Flight times: MOCK (using 800km/h estimate)
+- [ ] Train times: MOCK (using 120km/h estimate)
+- [ ] Bus times: MOCK (using 80km/h estimate)
+- [ ] Real booking links: NOT IMPLEMENTED
+
+### ItineraryTimeline.jsx
+- [ ] All activities: MOCK - Hardcoded sample activities
+- [ ] Times: MOCK - Static time slots
+- [ ] Place names: MOCK - Generic descriptions
+
+### NearbyPlaces.jsx
+- [ ] Opening hours: From Geoapify (may be incomplete)
+- [ ] Phone numbers: From Geoapify (may be incomplete)
+- [ ] Websites: From Geoapify (may be incomplete)
+
+
+## 🔴 TODO - Future Implementations
+-----------------------------------------
+
+### High Priority
+- [ ] Integrate real flight API (Amadeus, Skyscanner, or RapidAPI)
+- [ ] Integrate real train API (IRCTC API for India)
+- [ ] Integrate real bus API (RedBus, AbhiBus APIs)
+- [ ] Integrate real cab API (Uber, Ola APIs)
+- [ ] Generate itinerary using AI (Gemini/GPT)
+
+### Medium Priority
+- [ ] User authentication
+- [ ] Save/bookmark trips
+- [ ] Share trip functionality
+- [ ] Actual booking integration
+- [ ] Weather API integration
+- [ ] Currency conversion for international trips
+
+### Low Priority
+- [ ] Interactive map with route visualization
+- [ ] Offline mode / PWA
+- [ ] Push notifications for price drops
+- [ ] Trip collaboration features
+
+
+## 📦 API Keys Required
+-----------------------------------------
+
+### Currently Used
+- GEOCODING (Geoapify) - ✅ Configured in .env.local
+
+### Future APIs Needed
+- AMADEUS_API_KEY - For flights
+- IRCTC_API_KEY - For trains (India)
+- REDBUS_API_KEY - For buses
+- OPENWEATHER_API_KEY - For weather
+- GOOGLE_MAPS_API_KEY - For enhanced maps (optional)
+
+
+## 📝 Notes
+-----------------------------------------
+
+1. All pricing is currently in INR (₹)
+2. Distance calculations use Haversine formula (straight-line)
+3. Route Matrix API provides actual road distance
+4. Multi-modal routes (car→train, bus→train) are generated algorithmically
+5. Transfer times are estimated (30min for car→train, 20min for bus→train)
