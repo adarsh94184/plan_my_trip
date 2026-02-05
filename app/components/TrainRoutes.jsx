@@ -1,31 +1,34 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Train, Clock, IndianRupee, ArrowRight, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Train, Clock, IndianRupee, ArrowRight, AlertCircle, RefreshCw, Zap, Wallet } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
+import { SkeletonTrainCard } from "@/app/components/ui/skeleton";
+import { useDebounce } from "@/app/hooks/useDebounce";
 
 /**
  * TrainRoutes - Shows real train options between two stations using RailRadar API
  */
-export default function TrainRoutes({ from, to, fromCode, toCode }) {
+export default function TrainRoutes({ from, to }) {
     const [trains, setTrains] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [selectedTrain, setSelectedTrain] = useState(null);
 
-    useEffect(() => {
-        if (from && to) {
-            // Search for stations and fetch trains from all combinations
-            fetchWithStationSearch(from, to);
-        }
-    }, [from, to]);
+    // Debounce the search inputs
+    const debouncedFrom = useDebounce(from, 600);
+    const debouncedTo = useDebounce(to, 600);
 
-    // Extract just the city name from full address (e.g., "Mumbai, MH, India" -> "Mumbai")
+    useEffect(() => {
+        if (debouncedFrom && debouncedTo) {
+            fetchWithStationSearch(debouncedFrom, debouncedTo);
+        }
+    }, [debouncedFrom, debouncedTo]);
+
+    // Extract just the city name from full address
     const extractCityName = (fullAddress) => {
         if (!fullAddress) return '';
-        // Take the first part before comma
         const cityName = fullAddress.split(',')[0].trim();
-        // Remove common suffixes
         return cityName.replace(/\s+(India|City|Town|District)$/i, '').trim();
     };
 
@@ -34,61 +37,78 @@ export default function TrainRoutes({ from, to, fromCode, toCode }) {
         setError(null);
 
         try {
-            // Extract just city names for RailRadar search
             const fromCityClean = extractCityName(fromCity);
             const toCityClean = extractCityName(toCity);
 
             console.log(`Searching stations for: ${fromCityClean} -> ${toCityClean}`);
 
-            // Search for source stations
-            const srcRes = await fetch(`/api/railradar/search/stations?query=${encodeURIComponent(fromCityClean)}`);
-            const srcJson = await srcRes.json();
-            console.log('Source stations response:', srcJson);
+            const [srcRes, destRes] = await Promise.all([
+                fetch(`/api/railradar/search/stations?query=${encodeURIComponent(fromCityClean)}`),
+                fetch(`/api/railradar/search/stations?query=${encodeURIComponent(toCityClean)}`)
+            ]);
 
-            // API returns { stations: [...] }
+            const [srcJson, destJson] = await Promise.all([srcRes.json(), destRes.json()]);
+
             const srcData = srcJson.stations || [];
-
-            // Search for destination stations
-            const destRes = await fetch(`/api/railradar/search/stations?query=${encodeURIComponent(toCityClean)}`);
-            const destJson = await destRes.json();
-            console.log('Destination stations response:', destJson);
-
-            // API returns { stations: [...] }
             const destData = destJson.stations || [];
 
-            if (!srcData || !Array.isArray(srcData) || srcData.length === 0) {
-                setError(`Could not find railway station for "${fromCityClean}". Try a nearby major city.`);
+            if (srcData.length === 0) {
+                setError(`No railway station found for "${fromCityClean}". Try a nearby major city.`);
                 setLoading(false);
                 return;
             }
 
-            if (!destData || !Array.isArray(destData) || destData.length === 0) {
-                setError(`Could not find railway station for "${toCityClean}". Try a nearby major city.`);
+            if (destData.length === 0) {
+                setError(`No railway station found for "${toCityClean}". Try a nearby major city.`);
                 setLoading(false);
                 return;
             }
 
-            // Get station codes - try multiple stations (up to 3 per city)
-            const srcStations = srcData.slice(0, 3).map(s => ({
-                code: s.code || s.stationCode,
-                name: s.name || s.stationName
-            })).filter(s => s.code);
+            // Sort and filter stations to prioritize major ones
+            const prioritizeStations = (stations, query) => {
+                const q = query.toLowerCase();
+                return stations.sort((a, b) => {
+                    const nameA = a.name.toLowerCase();
+                    const nameB = b.name.toLowerCase();
 
-            const destStations = destData.slice(0, 3).map(s => ({
-                code: s.code || s.stationCode,
-                name: s.name || s.stationName
-            })).filter(s => s.code);
+                    // 1. Exact match (highest priority)
+                    if (nameA === q && nameB !== q) return -1;
+                    if (nameB === q && nameA !== q) return 1;
 
-            console.log('Source station codes:', srcStations.map(s => s.code));
-            console.log('Destination station codes:', destStations.map(s => s.code));
+                    // 2. Starts with query
+                    const startsA = nameA.startsWith(q);
+                    const startsB = nameB.startsWith(q);
+                    if (startsA && !startsB) return -1;
+                    if (startsB && !startsA) return 1;
 
-            if (srcStations.length === 0 || destStations.length === 0) {
-                setError("Invalid station codes received from API");
-                setLoading(false);
-                return;
-            }
+                    // 3. Contains major keywords (Junction, Central, Cantt, Terminus)
+                    const majorKeywords = ['jn', 'junction', 'central', 'cantt', 'terminus', 'city'];
+                    const isMajorA = majorKeywords.some(k => nameA.includes(k));
+                    const isMajorB = majorKeywords.some(k => nameB.includes(k));
+                    if (isMajorA && !isMajorB) return -1;
+                    if (isMajorB && !isMajorA) return 1;
 
-            // Try all combinations and aggregate results
+                    // 4. Alphabetical fallback
+                    return nameA.localeCompare(nameB);
+                });
+            };
+
+            const srcStations = prioritizeStations(srcData, fromCityClean)
+                .slice(0, 3)
+                .map(s => ({
+                    code: s.code || s.stationCode,
+                    name: s.name || s.stationName
+                }))
+                .filter(s => s.code);
+
+            const destStations = prioritizeStations(destData, toCityClean)
+                .slice(0, 3)
+                .map(s => ({
+                    code: s.code || s.stationCode,
+                    name: s.name || s.stationName
+                }))
+                .filter(s => s.code);
+
             await fetchTrainsFromMultipleStations(srcStations, destStations);
         } catch (err) {
             console.error('Station search error:', err);
@@ -102,105 +122,43 @@ export default function TrainRoutes({ from, to, fromCode, toCode }) {
         const seenTrainNumbers = new Set();
 
         try {
-            // Try each source-destination combination
             for (const src of srcStations) {
                 for (const dest of destStations) {
-                    console.log(`Trying route: ${src.code} -> ${dest.code}`);
-
                     try {
                         const res = await fetch(`/api/railradar/trains/between?from=${src.code}&to=${dest.code}`);
-
-                        if (!res.ok) {
-                            console.warn(`Failed to fetch trains from ${src.code} to ${dest.code}:`, res.status);
-                            continue;
-                        }
+                        if (!res.ok) continue;
 
                         const data = await res.json();
-                        console.log(`Response from ${src.code} -> ${dest.code}:`, data);
-
-                        // API returns { trains: [...] }
                         const trains = data.trains || [];
 
-                        if (Array.isArray(trains) && trains.length > 0) {
-                            console.log(`Found ${trains.length} trains for ${src.code} -> ${dest.code}`);
-                            // Add unique trains
-                            trains.forEach(train => {
-                                if (!seenTrainNumbers.has(train.number)) {
-                                    seenTrainNumbers.add(train.number);
-                                    allTrains.push({
-                                        ...train,
-                                        sourceStation: train.sourceStation || src.name,
-                                        destStation: train.destStation || dest.name,
-                                    });
-                                }
-                            });
-                        }
+                        trains.forEach(train => {
+                            if (!seenTrainNumbers.has(train.number)) {
+                                seenTrainNumbers.add(train.number);
+                                allTrains.push({
+                                    ...train,
+                                    sourceStation: train.sourceStation || src.name,
+                                    destStation: train.destStation || dest.name,
+                                });
+                            }
+                        });
                     } catch (err) {
-                        console.warn(`Error fetching trains from ${src.code} to ${dest.code}:`, err);
-                        // Continue to next combination
+                        continue;
                     }
                 }
             }
 
-            console.log(`Total unique trains found: ${allTrains.length}`);
-
             if (allTrains.length > 0) {
-                // Sort by duration and take top trains
                 const sortedTrains = allTrains
                     .filter(t => t.duration)
                     .sort((a, b) => parseDuration(a.duration) - parseDuration(b.duration))
-                    .slice(0, 9); // Show up to 9 trains
+                    .slice(0, 9);
                 setTrains(sortedTrains);
                 setError(null);
             } else {
                 setTrains([]);
-                setError(`No trains found between these cities. Try searching specific station names (e.g., "New Delhi" or "Mumbai Central")`);
+                setError(`No direct trains found. Try searching for specific station names.`);
             }
         } catch (err) {
-            console.error('Error fetching trains from multiple stations:', err);
-            setError(`Failed to fetch trains: ${err.message || 'Unknown error'}`);
-            setTrains([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchTrainsBetween = async (srcCode, destCode) => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            console.log(`Fetching trains from ${srcCode} to ${destCode}`);
-            const res = await fetch(`/api/railradar/trains/between?from=${srcCode}&to=${destCode}`);
-
-            if (!res.ok) {
-                const errorText = await res.text();
-                console.error('API Response Error:', res.status, errorText);
-                throw new Error(`API returned ${res.status}: ${errorText}`);
-            }
-
-            const data = await res.json();
-            console.log('API Response:', data);
-
-            if (data.error) {
-                console.error('API Error:', data.error);
-                setError(data.error);
-                setTrains([]);
-            } else if (data.trains && Array.isArray(data.trains) && data.trains.length > 0) {
-                console.log(`Found ${data.trains.length} trains`);
-                // Sort by duration and take top trains
-                const sortedTrains = data.trains
-                    .filter(t => t.duration)
-                    .sort((a, b) => parseDuration(a.duration) - parseDuration(b.duration))
-                    .slice(0, 6);
-                setTrains(sortedTrains);
-            } else {
-                console.warn('No trains in response:', data);
-                setTrains([]);
-                setError("No direct trains found between these stations. Try different cities or check station names.");
-            }
-        } catch (err) {
-            console.error('Fetch error:', err);
             setError(`Failed to fetch trains: ${err.message || 'Unknown error'}`);
             setTrains([]);
         } finally {
@@ -212,61 +170,78 @@ export default function TrainRoutes({ from, to, fromCode, toCode }) {
         if (!durationStr) return Infinity;
         const match = durationStr.match(/(\d+)h\s*(\d+)?m?/);
         if (match) {
-            const hours = parseInt(match[1]) || 0;
-            const mins = parseInt(match[2]) || 0;
-            return hours * 60 + mins;
+            return (parseInt(match[1]) || 0) * 60 + (parseInt(match[2]) || 0);
         }
         return Infinity;
     };
 
     const estimatePrice = (durationStr, trainType) => {
-        // Rough price estimation based on train type and duration in INR
         const hours = parseDuration(durationStr) / 60;
         const baseRates = {
-            'Rajdhani': 80, // per hour
-            'Shatabdi': 70,
-            'Duronto': 75,
-            'Vande Bharat': 90,
-            'Superfast': 40,
-            'Express': 30,
-            'Mail': 25,
-            'default': 35
+            'Rajdhani': 80, 'Shatabdi': 70, 'Duronto': 75,
+            'Vande Bharat': 90, 'Superfast': 40, 'Express': 30,
+            'Mail': 25, 'default': 35
         };
-
         const rate = Object.entries(baseRates).find(([key]) =>
             trainType?.toLowerCase().includes(key.toLowerCase())
         )?.[1] || baseRates.default;
-
-        return Math.round(hours * rate * 10) * 10; // Round to nearest 10
+        return Math.round(hours * rate * 10) * 10;
     };
 
-    const getTrainTypeColor = (trainName) => {
-        if (trainName?.toLowerCase().includes('rajdhani')) return 'bg-red-500/10 text-red-500 border-red-500/20';
-        if (trainName?.toLowerCase().includes('shatabdi')) return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-        if (trainName?.toLowerCase().includes('vande bharat')) return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
-        if (trainName?.toLowerCase().includes('duronto')) return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
+    const getTrainTypeStyle = (trainName) => {
+        if (trainName?.toLowerCase().includes('rajdhani'))
+            return { bg: 'bg-gradient-to-r from-red-500/20 to-red-600/10', text: 'text-red-500', border: 'border-red-500/30' };
+        if (trainName?.toLowerCase().includes('shatabdi'))
+            return { bg: 'bg-gradient-to-r from-blue-500/20 to-blue-600/10', text: 'text-blue-500', border: 'border-blue-500/30' };
+        if (trainName?.toLowerCase().includes('vande bharat'))
+            return { bg: 'bg-gradient-to-r from-orange-500/20 to-orange-600/10', text: 'text-orange-500', border: 'border-orange-500/30' };
+        if (trainName?.toLowerCase().includes('duronto'))
+            return { bg: 'bg-gradient-to-r from-purple-500/20 to-purple-600/10', text: 'text-purple-500', border: 'border-purple-500/30' };
+        return { bg: 'bg-gradient-to-r from-emerald-500/20 to-emerald-600/10', text: 'text-emerald-500', border: 'border-emerald-500/30' };
     };
 
+    // Loading skeleton
     if (loading) {
         return (
-            <div className="flex flex-col items-center justify-center py-12">
-                <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-                <p className="text-muted-foreground">Searching trains from all stations...</p>
-                <p className="text-xs text-muted-foreground mt-2">Checking multiple station combinations</p>
-            </div>
+            <section className="py-6">
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                            <Train className="w-6 h-6 text-primary" />
+                        </div>
+                        Train Routes
+                    </h2>
+                    <span className="text-sm text-muted-foreground animate-pulse">Searching...</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[...Array(6)].map((_, i) => (
+                        <SkeletonTrainCard key={i} />
+                    ))}
+                </div>
+            </section>
         );
     }
 
+    // Error state
     if (error) {
         return (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-                <AlertCircle className="w-8 h-8 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">{error}</p>
-                <Button variant="outline" size="sm" onClick={() => fetchWithStationSearch(from, to)}>
-                    <RefreshCw className="w-4 h-4 mr-2" /> Try Again
-                </Button>
-            </div>
+            <section className="py-6">
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-primary/10">
+                            <Train className="w-6 h-6 text-primary" />
+                        </div>
+                        Train Routes
+                    </h2>
+                </div>
+                <div className="flex flex-col items-center justify-center py-12 text-center bg-muted/30 rounded-xl border border-border">
+                    <AlertCircle className="w-10 h-10 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-4 max-w-md">{error}</p>
+                    <Button variant="outline" size="sm" onClick={() => fetchWithStationSearch(from, to)}>
+                        <RefreshCw className="w-4 h-4 mr-2" /> Try Again
+                    </Button>
+                </div>
+            </section>
         );
     }
 
@@ -274,37 +249,58 @@ export default function TrainRoutes({ from, to, fromCode, toCode }) {
         <section className="py-6">
             <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold flex items-center gap-3">
-                    <Train className="w-6 h-6 text-primary" />
+                    <div className="p-2 rounded-lg bg-primary/10">
+                        <Train className="w-6 h-6 text-primary" />
+                    </div>
                     Train Routes
                 </h2>
-                <span className="text-sm text-muted-foreground">{trains.length} trains found</span>
+                <span className="text-sm text-muted-foreground px-3 py-1 bg-muted rounded-full">
+                    {trains.length} trains found
+                </span>
             </div>
 
             {trains.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="text-center py-12 text-muted-foreground bg-muted/30 rounded-xl border border-border">
                     No trains found for this route
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {trains.map((train, idx) => {
                         const price = estimatePrice(train.duration, train.name);
+                        const style = getTrainTypeStyle(train.name);
+                        const isSelected = selectedTrain === train.number;
+                        const isFastest = idx === 0;
+                        const isCheapest = idx === trains.length - 1 && trains.length > 1;
+
                         return (
                             <div
                                 key={train.number || idx}
-                                className={`relative p-4 rounded-xl border transition-all cursor-pointer hover:shadow-lg ${selectedTrain === train.number
-                                    ? 'border-primary bg-primary/5 shadow-lg'
-                                    : 'border-border bg-card hover:border-primary/50'
-                                    }`}
+                                className={`relative p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer group
+                                    ${isSelected
+                                        ? 'border-primary shadow-lg shadow-primary/20 scale-[1.02]'
+                                        : `${style.border} hover:border-primary/50 hover:shadow-md`
+                                    }
+                                    ${style.bg}
+                                `}
                                 onClick={() => setSelectedTrain(train.number)}
                             >
+                                {/* Badge */}
+                                {(isFastest || isCheapest) && (
+                                    <div className={`absolute -top-2.5 -right-2.5 flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold text-white shadow-md
+                                        ${isFastest ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-emerald-500 to-green-500'}
+                                    `}>
+                                        {isFastest ? <><Zap className="w-3 h-3" /> Fastest</> : <><Wallet className="w-3 h-3" /> Budget</>}
+                                    </div>
+                                )}
+
                                 {/* Train Type Badge */}
-                                <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium mb-3 border ${getTrainTypeColor(train.name)}`}>
+                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold mb-3 ${style.text} bg-white/50 dark:bg-black/20`}>
                                     <Train className="w-3 h-3" />
                                     {train.type || 'Express'}
                                 </div>
 
                                 {/* Train Name & Number */}
-                                <h3 className="font-semibold text-foreground mb-1 line-clamp-1">
+                                <h3 className="font-bold text-foreground mb-1 line-clamp-1 group-hover:text-primary transition-colors">
                                     {train.name}
                                 </h3>
                                 <p className="text-xs text-muted-foreground mb-3">
@@ -312,17 +308,17 @@ export default function TrainRoutes({ from, to, fromCode, toCode }) {
                                 </p>
 
                                 {/* Route */}
-                                <div className="flex items-center gap-2 text-sm mb-4">
-                                    <span className="font-medium">{train.sourceStation || from}</span>
-                                    <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                                    <span className="font-medium">{train.destStation || to}</span>
+                                <div className="flex items-center gap-2 text-sm mb-4 p-2 rounded-lg bg-white/30 dark:bg-black/10">
+                                    <span className="font-medium truncate">{train.sourceStation || from}</span>
+                                    <ArrowRight className="w-4 h-4 text-primary shrink-0" />
+                                    <span className="font-medium truncate">{train.destStation || to}</span>
                                 </div>
 
                                 {/* Duration & Price */}
-                                <div className="flex items-center justify-between pt-3 border-t border-border">
-                                    <div className="flex items-center gap-1 text-muted-foreground">
+                                <div className="flex items-center justify-between pt-3 border-t border-white/20 dark:border-white/10">
+                                    <div className="flex items-center gap-1.5 text-muted-foreground">
                                         <Clock className="w-4 h-4" />
-                                        <span className="text-sm">{train.duration || 'N/A'}</span>
+                                        <span className="text-sm font-medium">{train.duration || 'N/A'}</span>
                                     </div>
                                     <div className="flex items-center gap-0.5 text-lg font-bold text-primary">
                                         <IndianRupee className="w-4 h-4" />
@@ -337,26 +333,15 @@ export default function TrainRoutes({ from, to, fromCode, toCode }) {
                                         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, i) => (
                                             <span
                                                 key={i}
-                                                className={`w-5 h-5 flex items-center justify-center text-xs rounded ${train.runningDays[i]
-                                                    ? 'bg-primary/20 text-primary font-medium'
-                                                    : 'bg-muted text-muted-foreground'
+                                                className={`w-6 h-6 flex items-center justify-center text-xs rounded-md font-medium transition-colors
+                                                    ${train.runningDays[i]
+                                                        ? 'bg-primary/20 text-primary'
+                                                        : 'bg-muted/50 text-muted-foreground'
                                                     }`}
                                             >
                                                 {day}
                                             </span>
                                         ))}
-                                    </div>
-                                )}
-
-                                {/* Best Deal Badge */}
-                                {idx === 0 && (
-                                    <div className="absolute -top-2 -right-2 bg-primary text-primary-foreground text-xs font-bold px-2 py-1 rounded-full">
-                                        Fastest
-                                    </div>
-                                )}
-                                {idx === trains.length - 1 && trains.length > 1 && (
-                                    <div className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-                                        Budget
                                     </div>
                                 )}
                             </div>
@@ -365,8 +350,7 @@ export default function TrainRoutes({ from, to, fromCode, toCode }) {
                 </div>
             )}
 
-            {/* Disclaimer */}
-            <p className="text-xs text-muted-foreground mt-4 text-center">
+            <p className="text-xs text-muted-foreground mt-6 text-center">
                 * Prices are estimated based on train type. Actual fares may vary. Book on IRCTC for exact prices.
             </p>
         </section>

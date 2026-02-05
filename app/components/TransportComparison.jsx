@@ -2,14 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plane, Train, Bus, Car, Clock, DollarSign, ArrowRight, Shuffle } from "lucide-react";
+import { Plane, Train, Bus, Car, Clock, ArrowRight, Shuffle, AlertCircle } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
+import { SkeletonCard } from "@/app/components/ui/skeleton";
+import { useDebounce } from "@/app/hooks/useDebounce";
 
 const TRANSPORT_MODES = {
-    flight: { icon: Plane, color: "text-blue-500", costPerKm: 12, avgSpeed: 800 }, // ₹12/km
-    train: { icon: Train, color: "text-green-500", costPerKm: 6, avgSpeed: 120 }, // ₹6/km
-    bus: { icon: Bus, color: "text-orange-500", costPerKm: 4, avgSpeed: 80 }, // ₹4/km
-    car: { icon: Car, color: "text-purple-500", costPerKm: 10, avgSpeed: 90 }, // ₹10/km
+    flight: { icon: Plane, color: "text-blue-500", costPerKm: 12, avgSpeed: 800 },
+    train: { icon: Train, color: "text-green-500", costPerKm: 6, avgSpeed: 120 },
+    bus: { icon: Bus, color: "text-orange-500", costPerKm: 4, avgSpeed: 80 },
+    car: { icon: Car, color: "text-purple-500", costPerKm: 10, avgSpeed: 90 },
 };
 
 const TransportOption = ({ route, isMultiModal = false }) => {
@@ -17,12 +19,14 @@ const TransportOption = ({ route, isMultiModal = false }) => {
 
     return (
         <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
             whileHover={{ y: -5 }}
-            className={`relative p-6 rounded-2xl bg-card border shadow-sm transition-all ${bestFor ? 'ring-2 ring-primary border-primary' : 'border-border'
+            className={`relative p-6 rounded-2xl bg-card border shadow-sm transition-all group hover:shadow-lg ${bestFor ? 'ring-2 ring-primary border-primary' : 'border-border'
                 }`}
         >
             {bestFor && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide shadow-md">
                     Best for {bestFor}
                 </div>
             )}
@@ -32,7 +36,7 @@ const TransportOption = ({ route, isMultiModal = false }) => {
                     {segments.map((seg, idx) => {
                         const Icon = TRANSPORT_MODES[seg.mode]?.icon || Bus;
                         return (
-                            <div key={idx} className="p-3 bg-muted rounded-xl">
+                            <div key={idx} className="p-3 bg-muted rounded-xl bg-gradient-to-br from-muted to-muted/50 border border-white/10">
                                 <Icon className={`w-6 h-6 ${TRANSPORT_MODES[seg.mode]?.color || 'text-foreground'}`} />
                             </div>
                         );
@@ -41,12 +45,13 @@ const TransportOption = ({ route, isMultiModal = false }) => {
                 <div className="text-right">
                     <span className="block text-2xl font-bold text-foreground">₹{totalPrice}</span>
                     <span className="text-sm text-muted-foreground">per person</span>
-                </div>        </div>
+                </div>
+            </div>
 
             <h3 className="text-lg font-semibold mb-2">
                 {isMultiModal ? (
                     <span className="flex items-center gap-2">
-                        <Shuffle className="w-4 h-4" />
+                        <Shuffle className="w-4 h-4 text-purple-500" />
                         {segments.map(s => s.mode).join(' → ')}
                     </span>
                 ) : (
@@ -56,16 +61,18 @@ const TransportOption = ({ route, isMultiModal = false }) => {
 
             <div className="flex items-center text-muted-foreground mb-4">
                 <Clock className="w-4 h-4 mr-2" />
-                <span className="text-sm">{totalDuration}</span>
+                <span className="text-sm font-medium">{totalDuration}</span>
             </div>
 
-            {/* Segment breakdown for multi-modal */}
             {isMultiModal && segments.length > 1 && (
-                <div className="mb-4 space-y-1 text-xs text-muted-foreground">
+                <div className="mb-4 space-y-1 text-xs text-muted-foreground p-2 bg-muted/50 rounded-lg">
                     {segments.map((seg, idx) => (
-                        <div key={idx} className="flex justify-between">
-                            <span className="capitalize">{seg.mode}:</span>
-                            <span>{seg.duration} • ₹{seg.price}</span>
+                        <div key={idx} className="flex justify-between items-center">
+                            <span className="capitalize flex items-center gap-1">
+                                {idx > 0 && <span className="text-xs mx-1">→</span>}
+                                {seg.mode}
+                            </span>
+                            <span className="font-mono">{seg.duration} • ₹{seg.price}</span>
                         </div>
                     ))}
                 </div>
@@ -73,13 +80,13 @@ const TransportOption = ({ route, isMultiModal = false }) => {
 
             <div className="flex flex-wrap gap-2 mb-6">
                 {tags.map((tag, i) => (
-                    <span key={i} className="text-xs px-2 py-1 bg-secondary/10 text-secondary-foreground rounded-md font-medium">
+                    <span key={i} className="text-xs px-2 py-1 bg-secondary/10 text-secondary-foreground rounded-md font-medium border border-secondary/20">
                         {tag}
                     </span>
                 ))}
             </div>
 
-            <Button className="w-full group">
+            <Button className="w-full group bg-primary/90 hover:bg-primary">
                 Select <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
             </Button>
         </motion.div>
@@ -89,15 +96,24 @@ const TransportOption = ({ route, isMultiModal = false }) => {
 export default function TransportComparison({ from, to }) {
     const [routes, setRoutes] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    // Debounce inputs
+    const debouncedFrom = useDebounce(from, 800);
+    const debouncedTo = useDebounce(to, 800);
 
     useEffect(() => {
         const calculateRoutes = async () => {
+            if (!debouncedFrom || !debouncedTo) return;
+
             setLoading(true);
+            setError(null);
+
             try {
                 // Geocode origin and destination
                 const [originRes, destRes] = await Promise.all([
-                    fetch(`/api/geocode?q=${encodeURIComponent(from)}&limit=1`),
-                    fetch(`/api/geocode?q=${encodeURIComponent(to)}&limit=1`)
+                    fetch(`/api/geocode?q=${encodeURIComponent(debouncedFrom)}&limit=1`),
+                    fetch(`/api/geocode?q=${encodeURIComponent(debouncedTo)}&limit=1`)
                 ]);
 
                 const originGeo = await originRes.json();
@@ -110,8 +126,20 @@ export default function TransportComparison({ from, to }) {
                     throw new Error("Could not geocode locations");
                 }
 
+                // Calculate straight-line distance first
+                const distance = calculateDistance(originCoords.lat, originCoords.lon, destCoords.lat, destCoords.lon);
+
+                // If distance is > 300km (Geoapify limit), skip matrix API and use estimates
+                if (distance > 300) {
+                    console.warn("Distance > 300km, using estimated routes to avoid API limit");
+                    const estRoutes = generateDistanceBasedRoutes(distance);
+                    setRoutes(estRoutes);
+                    setLoading(false);
+                    return;
+                }
+
                 // Calculate route matrix for different modes
-                const modes = ['drive', 'bicycle', 'walk'];
+                const modes = ['drive']; // Only use drive for cost saving on API
                 const matrixPromises = modes.map(mode =>
                     fetch('/api/routematrix', {
                         method: 'POST',
@@ -126,28 +154,51 @@ export default function TransportComparison({ from, to }) {
 
                 const matrixResults = await Promise.all(matrixPromises);
 
+                // Check for API errors
+                if (matrixResults.some(r => r.data.error || !r.data.formatted)) {
+                    throw new Error("Routing API limit or error");
+                }
+
                 // Generate route options
                 const generatedRoutes = generateRouteOptions(matrixResults, originCoords, destCoords);
                 setRoutes(generatedRoutes);
             } catch (error) {
                 console.error("Failed to calculate routes:", error);
-                // Fallback to mock data
-                setRoutes(getMockRoutes());
+
+                // Fallback to purely distance-based estimates on error
+                // Attempt to get coordinates if possible, otherwise use a default distance if totally failed
+                try {
+                    // Try to recover distance if we have coords but matrix failed
+                    // If we completely failed to get coords, we can't estimate real distance
+                    setError("Could not calculate transport options based on location.");
+                    setRoutes(generateDistanceBasedRoutes(500)); // usage fallback
+                } catch (e) {
+                    setRoutes(generateDistanceBasedRoutes(500)); // absolute fallback
+                }
             } finally {
                 setLoading(false);
             }
         };
 
-        if (from && to) {
-            calculateRoutes();
-        }
-    }, [from, to]);
+        calculateRoutes();
+    }, [debouncedFrom, debouncedTo]);
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
+            <section className="py-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-2xl font-bold flex items-center gap-2">
+                        <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">
+                            Calculating Best Travel Options...
+                        </span>
+                    </h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[...Array(3)].map((_, i) => (
+                        <SkeletonCard key={i} />
+                    ))}
+                </div>
+            </section>
         );
     }
 
@@ -167,23 +218,16 @@ export default function TransportComparison({ from, to }) {
     );
 }
 
-function generateRouteOptions(matrixResults, origin, dest) {
+// Generate routes based just on distance (fallback for long trips or API errors)
+function generateDistanceBasedRoutes(distanceKm) {
     const routes = [];
 
-    // Calculate distance for pricing
-    const distance = calculateDistance(origin.lat, origin.lon, dest.lat, dest.lon);
-
-    // Single-mode routes
-    const driveData = matrixResults.find(r => r.mode === 'drive');
-    const driveTime = driveData?.data?.formatted?.[0]?.[0]?.timeRaw || 0;
-    const driveDistance = driveData?.data?.formatted?.[0]?.[0]?.distanceRaw || distance * 1000;
-
-    // Flight (for distances > 200km)
-    if (distance > 200) {
+    // Flight (for long distances)
+    if (distanceKm > 250) {
         routes.push({
-            segments: [{ mode: 'flight', duration: formatTime(distance / 800 * 3600), price: Math.round(distance * 12) }],
-            totalDuration: formatTime(distance / 800 * 3600 + 7200), // Add 2h for airport time
-            totalPrice: Math.round(distance * 12),
+            segments: [{ mode: 'flight', duration: formatTime(distanceKm / 800 * 3600 + 5400), price: Math.round(distanceKm * 5 + 2000) }],
+            totalDuration: formatTime(distanceKm / 800 * 3600 + 7200),
+            totalPrice: Math.round(distanceKm * 5 + 2000),
             tags: ['Fastest', 'Premium'],
             bestFor: 'Time',
         });
@@ -191,87 +235,49 @@ function generateRouteOptions(matrixResults, origin, dest) {
 
     // Train
     routes.push({
-        segments: [{ mode: 'train', duration: formatTime(distance / 120 * 3600), price: Math.round(distance * 6) }],
-        totalDuration: formatTime(distance / 120 * 3600),
-        totalPrice: Math.round(distance * 6),
-        tags: ['Comfortable', 'Scenic', 'WiFi'],
-        bestFor: distance > 200 ? 'Value' : null,
+        segments: [{ mode: 'train', duration: formatTime(distanceKm / 80 * 3600), price: Math.round(distanceKm * 1.5) }],
+        totalDuration: formatTime(distanceKm / 80 * 3600),
+        totalPrice: Math.round(distanceKm * 1.5),
+        tags: ['Comfortable', 'Scenic'],
+        bestFor: distanceKm > 200 && distanceKm < 800 ? 'Value' : null,
     });
 
     // Bus
     routes.push({
-        segments: [{ mode: 'bus', duration: formatTime(distance / 80 * 3600), price: Math.round(distance * 4) }],
-        totalDuration: formatTime(distance / 80 * 3600),
-        totalPrice: Math.round(distance * 4),
+        segments: [{ mode: 'bus', duration: formatTime(distanceKm / 60 * 3600), price: Math.round(distanceKm * 2) }],
+        totalDuration: formatTime(distanceKm / 60 * 3600),
+        totalPrice: Math.round(distanceKm * 2),
         tags: ['Budget', 'Direct'],
         bestFor: 'Budget',
     });
 
-    // Multi-modal: Car + Train
-    if (distance > 100) {
-        const carDistance = distance * 0.2; // 20% by car
-        const trainDistance = distance * 0.8; // 80% by train
-        const carTime = (carDistance / 90) * 3600;
-        const trainTime = (trainDistance / 120) * 3600;
-
+    // Car (if < 800km)
+    if (distanceKm < 800) {
         routes.push({
-            segments: [
-                { mode: 'car', duration: formatTime(carTime), price: Math.round(carDistance * 10) },
-                { mode: 'train', duration: formatTime(trainTime), price: Math.round(trainDistance * 6) },
-            ],
-            totalDuration: formatTime(carTime + trainTime + 1800), // Add 30min transfer
-            totalPrice: Math.round(carDistance * 10 + trainDistance * 6),
-            tags: ['Flexible', 'Mixed'],
-            bestFor: null,
+            segments: [{ mode: 'car', duration: formatTime(distanceKm / 70 * 3600), price: Math.round(distanceKm * 8) }],
+            totalDuration: formatTime(distanceKm / 70 * 3600),
+            totalPrice: Math.round(distanceKm * 8),
+            tags: ['Flexible', 'Private'],
+            bestFor: distanceKm < 300 ? 'Comfort' : null,
         });
     }
 
-    // Multi-modal: Bus + Train
-    if (distance > 150) {
-        const busDistance = distance * 0.3;
-        const trainDistance = distance * 0.7;
-        const busTime = (busDistance / 80) * 3600;
-        const trainTime = (trainDistance / 120) * 3600;
-
-        routes.push({
-            segments: [
-                { mode: 'bus', duration: formatTime(busTime), price: Math.round(busDistance * 4) },
-                { mode: 'train', duration: formatTime(trainTime), price: Math.round(trainDistance * 6) },
-            ],
-            totalDuration: formatTime(busTime + trainTime + 1200), // Add 20min transfer
-            totalPrice: Math.round(busDistance * 4 + trainDistance * 6),
-            tags: ['Economical', 'Mixed'],
-            bestFor: null,
-        });
-    }
-
-    return routes.slice(0, 6); // Return top 6 options
+    return routes;
 }
 
-function getMockRoutes() {
-    return [
-        {
-            segments: [{ mode: 'flight', duration: '1h 20m', price: 4500 }],
-            totalDuration: '3h 20m',
-            totalPrice: 4500,
-            tags: ['Fastest', 'Premium'],
-            bestFor: 'Time',
-        },
-        {
-            segments: [{ mode: 'train', duration: '4h 15m', price: 1200 }],
-            totalDuration: '4h 15m',
-            totalPrice: 1200,
-            tags: ['Comfortable', 'Scenic'],
-            bestFor: 'Value',
-        },
-        {
-            segments: [{ mode: 'bus', duration: '6h 30m', price: 600 }],
-            totalDuration: '6h 30m',
-            totalPrice: 600,
-            tags: ['Budget', 'Direct'],
-            bestFor: 'Budget',
-        },
-    ];
+function generateRouteOptions(matrixResults, origin, dest) {
+    const routes = [];
+    const distance = calculateDistance(origin.lat, origin.lon, dest.lat, dest.lon);
+
+    // Drive Data
+    const driveData = matrixResults.find(r => r.mode === 'drive');
+    const driveDistance = driveData?.data?.formatted?.[0]?.[0]?.distanceRaw || distance * 1000; // meters
+    const driveTime = driveData?.data?.formatted?.[0]?.[0]?.timeRaw || (distance / 70 * 3600); // seconds
+
+    // Calculate real distance in km
+    const realDistKm = driveDistance / 1000;
+
+    return generateDistanceBasedRoutes(realDistKm);
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
