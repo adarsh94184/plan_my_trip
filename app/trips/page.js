@@ -3,6 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import TransportComparison from "../components/TransportComparison";
+import TrainRoutes from "../components/TrainRoutes";
+import BusRoutes from "../components/BusRoutes";
 import ItineraryTimeline from "../components/ItineraryTimeline";
 import TripMap from "../components/TripMap";
 import NearbyPlaces from "../components/NearbyPlaces";
@@ -55,9 +57,19 @@ function TripsContent() {
                     />
                 </div>
 
-                {/* Transport Cards */}
+                {/* Transport Overview */}
                 <div className="bg-card rounded-2xl p-6 shadow-xl border border-border mb-12">
                     <TransportComparison from={from} to={to} />
+                </div>
+
+                {/* Train Routes - Real Data from RailRadar */}
+                <div className="bg-card rounded-2xl p-6 shadow-xl border border-border mb-12">
+                    <TrainRoutes from={from} to={to} />
+                </div>
+
+                {/* Bus Routes */}
+                <div className="bg-card rounded-2xl p-6 shadow-xl border border-border mb-12">
+                    <BusRoutes from={from} to={to} />
                 </div>
 
                 {/* Nearby Places */}

@@ -5,13 +5,22 @@
 ## ✅ COMPLETED - Real API Integrations
 -----------------------------------------
 
-### API Routes (Using Geoapify)
+### Geoapify API Routes
 - [x] /api/geocode - Location search & autocomplete (REAL)
 - [x] /api/marker - Custom map marker icons (REAL)
 - [x] /api/placedetails - Place details with geometry (REAL)
 - [x] /api/places - Nearby places search by category (REAL)
 - [x] /api/routematrix - Time-distance matrix calculation (REAL)
 - [x] /api/routing - Turn-by-turn directions (REAL)
+- [x] /api/routeplanner - VRP route optimization with multiple stops (REAL)
+
+### RailRadar API Routes (Indian Railways)
+- [x] /api/railradar/search/stations - Search railway stations (REAL)
+- [x] /api/railradar/search/trains - Search trains by number/name (REAL)
+- [x] /api/railradar/trains/between - Find trains between stations (REAL)
+- [x] /api/railradar/trains/[trainNumber] - Get train details (static/live) (REAL)
+- [x] /api/railradar/stations/[stationCode]/info - Get station info (REAL)
+- [x] /api/railradar/stations/[stationCode]/live - Live station board (REAL)
 
 ### Components Using Real APIs
 - [x] TripMap - Uses /api/geocode for origin/destination geocoding
@@ -20,6 +29,10 @@
 - [x] NearbyPlaces - Uses /api/places for attractions/restaurants
 - [x] TransportComparison - Uses /api/geocode for coordinates
 - [x] TransportComparison - Uses /api/routematrix for distance calc
+- [x] TrainRoutes - Uses /api/railradar/search/stations for station lookup
+- [x] TrainRoutes - Uses /api/railradar/trains/between for real train options
+- [x] TrainRoutes - Searches multiple stations per city (up to 9 combinations)
+- [x] BusRoutes - Shows estimated bus options with amenities and pricing
 
 ### Frontend Pages
 - [x] /geocode - Geocoding demo page
@@ -30,18 +43,25 @@
 
 ### TransportComparison.jsx
 - [ ] Flight prices: MOCK (using ₹12/km estimate)
-- [ ] Train prices: MOCK (using ₹6/km estimate)
-- [ ] Bus prices: MOCK (using ₹4/km estimate)
+- [ ] Train prices: MOCK (using ₹6/km estimate) - Real data available via TrainRoutes component
+- [x] Bus prices: Implemented in BusRoutes component (estimated)
 - [ ] Car/Cab prices: MOCK (using ₹10/km estimate)
 - [ ] Flight times: MOCK (using 800km/h estimate)
-- [ ] Train times: MOCK (using 120km/h estimate)
-- [ ] Bus times: MOCK (using 80km/h estimate)
+- [ ] Train times: MOCK (using 120km/h estimate) - Real data available via TrainRoutes component
+- [x] Bus times: Implemented in BusRoutes component (estimated)
 - [ ] Real booking links: NOT IMPLEMENTED
 
+### BusRoutes.jsx
+- [x] Multiple bus types (Volvo, AC Seater, Sleeper, etc.)
+- [x] Estimated prices in ₹ based on distance
+- [x] Amenities display (WiFi, Charging, AC, Sleeper)
+- [x] Seat availability
+- [x] Departure/arrival times
+- [ ] Real API integration (RedBus/AbhiBus) - Future enhancement
+
 ### ItineraryTimeline.jsx
-- [ ] All activities: MOCK - Hardcoded sample activities
-- [ ] Times: MOCK - Static time slots
-- [ ] Place names: MOCK - Generic descriptions
+- [x] Mock activities replaced with "Coming Soon" placeholder
+- [ ] AI-powered itinerary generation: NOT IMPLEMENTED (planned)
 
 ### NearbyPlaces.jsx
 - [ ] Opening hours: From Geoapify (may be incomplete)
@@ -54,10 +74,11 @@
 
 ### High Priority
 - [ ] Integrate real flight API (Amadeus, Skyscanner, or RapidAPI)
-- [ ] Integrate real train API (IRCTC API for India)
+- [x] Integrate real train API (RailRadar for Indian Railways) ✅
 - [ ] Integrate real bus API (RedBus, AbhiBus APIs)
 - [ ] Integrate real cab API (Uber, Ola APIs)
 - [ ] Generate itinerary using AI (Gemini/GPT)
+- [ ] Use RailRadar API in TransportComparison component
 
 ### Medium Priority
 - [ ] User authentication
@@ -79,10 +100,10 @@
 
 ### Currently Used
 - GEOCODING (Geoapify) - ✅ Configured in .env.local
+- RAILRADAR_API (RailRadar) - ✅ Configured in .env.local
 
 ### Future APIs Needed
 - AMADEUS_API_KEY - For flights
-- IRCTC_API_KEY - For trains (India)
 - REDBUS_API_KEY - For buses
 - OPENWEATHER_API_KEY - For weather
 - GOOGLE_MAPS_API_KEY - For enhanced maps (optional)
