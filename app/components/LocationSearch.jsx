@@ -30,6 +30,13 @@ export default function LocationSearch({
     const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef(null);
 
+    // Sync query with initialValue if it changes
+    useEffect(() => {
+        if (initialValue) {
+            setQuery(initialValue);
+        }
+    }, [initialValue]);
+
     const searchLocation = useCallback(async (searchQuery) => {
         if (!searchQuery.trim()) {
             setResults([]);

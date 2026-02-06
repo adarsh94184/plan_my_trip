@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import LocationSearch from "./LocationSearch";
 import { Button } from "@/app/components/ui/button";
 import { CalendarIcon, ArrowRight } from "lucide-react";
-import { format, addDays } from "date-fns";
+import { format, addDays, parseISO } from "date-fns";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/style.css";
 
@@ -21,6 +21,24 @@ export default function SearchForm() {
 
     const [activeCalendar, setActiveCalendar] = useState(null); // 'start' | 'end' | null
 
+    // Load saved search from session storage on mount
+    useEffect(() => {
+        try {
+            const savedData = sessionStorage.getItem('tripSearch');
+            if (savedData) {
+                const parsed = JSON.parse(savedData);
+
+                if (parsed.origin) setOrigin(parsed.origin);
+                if (parsed.destination) setDestination(parsed.destination);
+
+                if (parsed.startDate) setStartDate(parseISO(parsed.startDate));
+                if (parsed.endDate) setEndDate(parseISO(parsed.endDate));
+            }
+        } catch (e) {
+            console.error('Error loading saved search:', e);
+        }
+    }, []);
+
     const handleSubmit = (e) => {
         e.preventDefault();
 
@@ -29,18 +47,27 @@ export default function SearchForm() {
             return;
         }
 
-        const params = new URLSearchParams({
-            origin: origin.name,
-            originLat: origin.lat,
-            originLon: origin.lon,
-            destination: destination.name,
-            destinationLat: destination.lat,
-            destinationLon: destination.lon,
+        // Store trip data in sessionStorage for clean URL
+        const tripData = {
+            origin: {
+                name: origin.name,
+                lat: origin.lat,
+                lon: origin.lon
+            },
+            destination: {
+                name: destination.name,
+                lat: destination.lat,
+                lon: destination.lon
+            },
             startDate: format(startDate, "yyyy-MM-dd"),
-            endDate: format(endDate, "yyyy-MM-dd")
-        });
+            endDate: format(endDate, "yyyy-MM-dd"),
+            timestamp: Date.now() // For cache expiry if needed
+        };
 
-        router.push(`/trips?${params.toString()}`);
+        sessionStorage.setItem('tripSearch', JSON.stringify(tripData));
+
+        // Navigate to clean URL
+        router.push('/trips');
     };
 
     const handleStartDateSelect = (date) => {
@@ -77,6 +104,7 @@ export default function SearchForm() {
                     <LocationSearch
                         placeholder="Origin (e.g. New Delhi)"
                         onSelect={setOrigin}
+                        initialValue={origin?.name || ""}
                         className="w-full"
                     />
                 </div>
@@ -86,6 +114,7 @@ export default function SearchForm() {
                     <LocationSearch
                         placeholder="Destination (e.g. Mumbai)"
                         onSelect={setDestination}
+                        initialValue={destination?.name || ""}
                         className="w-full"
                     />
                 </div>

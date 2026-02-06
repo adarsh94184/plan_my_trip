@@ -9,7 +9,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { searchBuses, getCitySuggestions, getSeatLayout } from '@/lib/bus-scraper';
+import { searchBuses } from '@/lib/bus-scraper';
 
 /**
  * GET /api/bus
@@ -19,12 +19,11 @@ import { searchBuses, getCitySuggestions, getSeatLayout } from '@/lib/bus-scrape
  * @async
  * @param {Request} request - Next.js request object
  * 
- * @query {string} action - Action type: 'search' (default), 'suggestions', 'seats'
+ * @query {string} action - Action type: 'search' (default), 'suggestions'
  * @query {string} from - Source city name (required for search)
  * @query {string} to - Destination city name (required for search)
  * @query {string} date - Journey date in YYYY-MM-DD format (required for search)
  * @query {string} q - Search query for city suggestions (required for suggestions)
- * @query {string} busId - Bus ID for seat layout (required for seats)
  * 
  * @returns {Promise<Response>} JSON response with bus data
  * 
@@ -35,10 +34,6 @@ import { searchBuses, getCitySuggestions, getSeatLayout } from '@/lib/bus-scrape
  * @example
  * // Get city suggestions
  * GET /api/bus?action=suggestions&q=Mum
- * 
- * @example
- * // Get seat layout
- * GET /api/bus?action=seats&busId=bus_123
  * 
  * @response
  * {
@@ -74,24 +69,41 @@ export async function GET(request) {
         const date = searchParams.get('date');
         const action = searchParams.get('action') || 'search';
 
-        // Handle city suggestions
+        // Handle city suggestions - use geocoding API directly
         if (action === 'suggestions') {
             const query = searchParams.get('q');
             if (!query) {
                 return NextResponse.json({ error: 'Query parameter required' }, { status: 400 });
             }
-            const suggestions = await getCitySuggestions(query);
-            return NextResponse.json({ suggestions });
-        }
 
-        // Handle seat layout
-        if (action === 'seats') {
-            const busId = searchParams.get('busId');
-            if (!busId) {
-                return NextResponse.json({ error: 'Bus ID required' }, { status: 400 });
+            try {
+                // Call geocoding API for suggestions
+                const geocodeUrl = `https://api.geoapify.com/v1/geocode/autocomplete?text=${encodeURIComponent(query)}&limit=10&apiKey=${process.env.GEOCODING}`;
+                const geocodeResponse = await fetch(geocodeUrl);
+
+                if (!geocodeResponse.ok) {
+                    return NextResponse.json({ suggestions: [] });
+                }
+
+                const data = await geocodeResponse.json();
+                const suggestions = (data.features || []).map(feature => {
+                    const props = feature.properties;
+                    const parts = [];
+
+                    if (props.city) parts.push(props.city);
+                    else if (props.name) parts.push(props.name);
+
+                    if (props.state) parts.push(props.state);
+                    else if (props.county) parts.push(props.county);
+
+                    return parts.join(', ');
+                }).filter(Boolean);
+
+                return NextResponse.json({ suggestions });
+            } catch (error) {
+                console.error('Geocoding error:', error);
+                return NextResponse.json({ suggestions: [] });
             }
-            const seatLayout = await getSeatLayout(busId);
-            return NextResponse.json({ seatLayout });
         }
 
         // Handle bus search
